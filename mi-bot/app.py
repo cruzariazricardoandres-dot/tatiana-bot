@@ -175,7 +175,7 @@ def generate_ia_response(user_id, user_message, user_session):
     while retry_count <= max_retries:
         try:
             response = co.chat(
-                model="command-r", # <-- MODELO ACTUALIZADO
+                model="command-r-plus", # <-- MODELO ACTUALIZADO
                 preamble=current_instructions,
                 message=user_message,
                 chat_history=cohere_history,
