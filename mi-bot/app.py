@@ -74,6 +74,7 @@ class BotConfig:
     IGNORED_USERS = ["game of thrones"]
     FORBIDDEN_WORDS = ["sexi", "hago"]
 
+    # --- DICCIONARIO DE RESPUESTAS PREDEFINIDAS ---
     PREDEFINED_RESPONSES = {
         "[Recordatorio en línea]": "Hola cielo como estas",
         "es muy emparejado para ti": "Holis busco novio y tú estas lindo 🥺",
@@ -139,6 +140,7 @@ def save_user_history(user_id, session_data):
     finally:
         conn.close()
 
+# --- FUNCIÓN PARA EL FIREWALL DE PALABRAS ---
 def contains_forbidden_word(text):
     text_lower = text.lower()
     for word in BotConfig.FORBIDDEN_WORDS:
@@ -147,14 +149,16 @@ def contains_forbidden_word(text):
             return True
     return False
 
+# --- FUNCIÓN PARA MANEJAR MENSAJES DEL SISTEMA ---
 def handle_system_message(message):
+    """Revisa si el mensaje contiene un disparador y devuelve la respuesta predefinida correspondiente."""
     for trigger, response in BotConfig.PREDEFINED_RESPONSES.items():
         if trigger in message:
             logging.info(f"SYSTEM_TRIGGER: Se detectó la frase '{trigger}'. Respondiendo con un mensaje predefinido.")
             return response
     return None
 
-# --- GENERAR RESPUESTA CON COHERE (actualizado) ---
+# --- GENERAR RESPUESTA CON COHERE ---
 def generate_ia_response(user_id, user_message, user_session):
     instrucciones_sistema = BotConfig.PREAMBULO_BASE
     cohere_history = []
@@ -162,42 +166,38 @@ def generate_ia_response(user_id, user_message, user_session):
         role = "USER" if msg.get("role") == "USER" else "CHATBOT"
         cohere_history.append({"role": role, "message": msg.get("message", "")})
     last_bot_message = next((msg["message"] for msg in reversed(cohere_history) if msg["role"] == "CHATBOT"), None)
-
-    modelos = [
-        "command-a-03-2025",
-        "command-r-plus-08-2024",
-        "command-r-08-2024"
-    ]
-
+    max_retries = 2
+    retry_count = 0
     ia_reply = ""
     current_instructions = instrucciones_sistema
-
-    for modelo in modelos:
+    while retry_count <= max_retries:
         try:
-            logging.info(f"Intentando modelo Cohere: {modelo}")
+            logging.info(f"Intentando modelo Cohere: command-a-08-2025") # Log para saber qué modelo usamos
             response = co.chat(
-                model=modelo,
+                model="command-a-08-2025", # <-- MODELO FINAL Y FUNCIONAL
                 preamble=current_instructions,
                 message=user_message,
                 chat_history=cohere_history,
                 temperature=0.9
             )
             ia_reply = response.text.strip()
-
             is_repeat = (ia_reply and ia_reply == last_bot_message)
             is_forbidden = contains_forbidden_word(ia_reply)
-
             if ia_reply and not is_repeat and not is_forbidden:
                 break
-            else:
-                logging.warning(f"Modelo {modelo} devolvió respuesta inválida. Probando siguiente modelo...")
+            retry_count += 1
+            if retry_count <= max_retries:
+                logging.warning(f"Respuesta inválida detectada. Regenerando...")
+                if is_repeat:
+                    current_instructions += "\nACCIÓN CORREGIDA: Acabas de decir eso. Di algo completamente diferente."
+                if is_forbidden:
+                    current_instructions += "\nACCIÓN CORREGIDA: Tu última respuesta usó una palabra prohibida. Genera una respuesta diferente."
         except Exception as e:
-            logging.error(f"Error con Cohere (modelo {modelo}): {e}")
-            ia_reply = ""
-
-    if not ia_reply:
+            logging.error(f"Error con Cohere: {e}")
+            ia_reply = "mmm me perdi jaja 😅"
+            break
+    if not ia_reply or ia_reply == last_bot_message or contains_forbidden_word(ia_reply):
         ia_reply = random.choice(["jaja si", "ok", "dale", "listo"])
-
     should_have_emoji = not user_session.get("emoji_last_message", False)
     if should_have_emoji:
         if not contains_emoji(ia_reply):
@@ -206,7 +206,6 @@ def generate_ia_response(user_id, user_message, user_session):
     else:
         ia_reply = strip_emojis(ia_reply)
         user_session["emoji_last_message"] = False
-
     user_session["history"].append({"role": "USER", "message": user_message})
     user_session["history"].append({"role": "CHATBOT", "message": ia_reply})
     return ia_reply
