@@ -74,6 +74,7 @@ class BotConfig:
     IGNORED_USERS = ["game of thrones"]
     FORBIDDEN_WORDS = ["sexi", "hago"]
 
+    # --- DICCIONARIO DE RESPUESTAS PREDEFINIDAS ---
     PREDEFINED_RESPONSES = {
         "[Recordatorio en línea]": "Hola cielo como estas",
         "es muy emparejado para ti": "Holis busco novio y tú estas lindo 🥺",
@@ -89,12 +90,14 @@ class BotConfig:
         "Me sales a cada rato en recomendados, el destino quiere algo no? jaja 😊"
     ]
     PREAMBULO_BASE = """
-Eres Tatiana, una mujer venezolana de 21 años, divertida, soñadora y apasionada.
-Eres de Venezuela, pero EVITA usar la palabra 'chamo'.
-Responde en frases cortas, estilo chat, con errores de tipeo reales.
-Usa expresividad alta: mayúsculas, jaja, mmm, repite letras.
+Eres Tatiana, una mujer venezolana de 21 años. Tu objetivo principal es encontrar un novio. Eres muy coqueta, un poco atrevida y siempre buscas sacar una conversación romántica o divertida.
+No tienes miedo de tomar la iniciativa.
+Usa frases cariñosas como 'mi amor', 'cielo', 'bebé' de vez en cuando, pero sin abusar.
+EVITA usar la palabra 'chamo'.
+Responde en frases muy cortas, como un chat real, a veces con errores de tipeo.
+Usa expresividad alta: mayúsculas para enfatizar, jaja, mmm, repite letras.
 Nunca pidas regalos o dinero.
-REGLA MÁS IMPORTANTE: Tus respuestas deben ser EXTREMADAMENTE cortas, como un chat real. ¡Una sola frase o incluso una sola palabra a veces! NUNCA escribas más de 15 palabras.
+REGLA MÁS IMPORTANTE: Tus respuestas deben ser EXTREMADAMENTE cortas. ¡Una sola frase o incluso una sola palabra a veces! NUNCA escribas más de 15 palabras.
 """
 
 # --- FUNCIONES AUXILIARES ---
@@ -139,6 +142,7 @@ def save_user_history(user_id, session_data):
     finally:
         conn.close()
 
+# --- FUNCIÓN PARA EL FIREWALL DE PALABRAS ---
 def contains_forbidden_word(text):
     text_lower = text.lower()
     for word in BotConfig.FORBIDDEN_WORDS:
@@ -147,14 +151,16 @@ def contains_forbidden_word(text):
             return True
     return False
 
+# --- FUNCIÓN PARA MANEJAR MENSAJES DEL SISTEMA ---
 def handle_system_message(message):
+    """Revisa si el mensaje contiene un disparador y devuelve la respuesta predefinida correspondiente."""
     for trigger, response in BotConfig.PREDEFINED_RESPONSES.items():
         if trigger in message:
             logging.info(f"SYSTEM_TRIGGER: Se detectó la frase '{trigger}'. Respondiendo con un mensaje predefinido.")
             return response
     return None
 
-# --- GENERAR RESPUESTA CON COHERE (SOLO 1 MODELO) ---
+# --- GENERAR RESPUESTA CON COHERE ---
 def generate_ia_response(user_id, user_message, user_session):
     instrucciones_sistema = BotConfig.PREAMBULO_BASE
     cohere_history = []
@@ -162,31 +168,38 @@ def generate_ia_response(user_id, user_message, user_session):
         role = "USER" if msg.get("role") == "USER" else "CHATBOT"
         cohere_history.append({"role": role, "message": msg.get("message", "")})
     last_bot_message = next((msg["message"] for msg in reversed(cohere_history) if msg["role"] == "CHATBOT"), None)
-
+    max_retries = 2
+    retry_count = 0
     ia_reply = ""
-
-    try:
-        logging.info("Usando Cohere modelo: command-a-03-2025")
-        response = co.chat(
-            model="command-a-03-2025",
-            preamble=instrucciones_sistema,
-            message=user_message,
-            chat_history=cohere_history,
-            temperature=0.9
-        )
-        ia_reply = response.text.strip()
-        logging.info(f"Respuesta Cohere: {ia_reply}")
-    except Exception as e:
-        logging.error(f"Error con Cohere: {e}")
-        ia_reply = ""
-
-    # Si no hay respuesta válida o repetida o prohibida, fallback
-    is_repeat = (ia_reply and ia_reply == last_bot_message)
-    is_forbidden = contains_forbidden_word(ia_reply)
-    if not ia_reply or is_repeat or is_forbidden:
+    current_instructions = instrucciones_sistema
+    while retry_count <= max_retries:
+        try:
+            logging.info(f"Intentando modelo Cohere: command-a-08-2025")
+            response = co.chat(
+                model="command-a-08-2025", # <-- MODELO FINAL Y FUNCIONAL
+                preamble=current_instructions,
+                message=user_message,
+                chat_history=cohere_history,
+                temperature=0.9
+            )
+            ia_reply = response.text.strip()
+            is_repeat = (ia_reply and ia_reply == last_bot_message)
+            is_forbidden = contains_forbidden_word(ia_reply)
+            if ia_reply and not is_repeat and not is_forbidden:
+                break
+            retry_count += 1
+            if retry_count <= max_retries:
+                logging.warning(f"Respuesta inválida detectada. Regenerando...")
+                if is_repeat:
+                    current_instructions += "\nACCIÓN CORREGIDA: Acabas de decir eso. Di algo completamente diferente."
+                if is_forbidden:
+                    current_instructions += "\nACCIÓN CORREGIDA: Tu última respuesta usó una palabra prohibida. Genera una respuesta diferente."
+        except Exception as e:
+            logging.error(f"Error con Cohere: {e}")
+            ia_reply = "mmm me perdi jaja 😅"
+            break
+    if not ia_reply or ia_reply == last_bot_message or contains_forbidden_word(ia_reply):
         ia_reply = random.choice(["jaja si", "ok", "dale", "listo"])
-
-    # Manejo de emoji alternado
     should_have_emoji = not user_session.get("emoji_last_message", False)
     if should_have_emoji:
         if not contains_emoji(ia_reply):
@@ -195,13 +208,11 @@ def generate_ia_response(user_id, user_message, user_session):
     else:
         ia_reply = strip_emojis(ia_reply)
         user_session["emoji_last_message"] = False
-
-    # Guardar historial en la sesión
     user_session["history"].append({"role": "USER", "message": user_message})
     user_session["history"].append({"role": "CHATBOT", "message": ia_reply})
     return ia_reply
 
-# --- FLASK API ---
+# --- FLASK API (CON LÓGICA DE PRIMER MENSAJE) ---
 app = Flask(__name__)
 
 @app.route("/chat", methods=["POST"])
@@ -227,21 +238,37 @@ def handle_chat():
             if user_id not in user_locks:
                 user_locks[user_id] = threading.Lock()
             user_lock = user_locks[user_id]
+        
         with user_lock:
             user_session = get_user_history(user_id)
-            system_response = handle_system_message(user_message)
-            if system_response:
+
+            # --- LÓGICA AVANZADA: DETECTAR SI ES EL PRIMER MENSAJE ---
+            if not user_session.get("history"):
+                logging.info(f"Nueva conversación con {user_id}. Enviando primer mensaje predefinido.")
+                
+                first_message_response = "Holis busco novio y tú estas lindo 🥺"
+                
                 user_session["history"].append({"role": "USER", "message": user_message})
-                user_session["history"].append({"role": "CHATBOT", "message": system_response})
-                if contains_emoji(system_response):
-                    user_session["emoji_last_message"] = True
-                else:
-                    user_session["emoji_last_message"] = False
+                user_session["history"].append({"role": "CHATBOT", "message": first_message_response})
+                user_session["emoji_last_message"] = contains_emoji(first_message_response)
+                
                 save_user_history(user_id, user_session)
-                return system_response
-            ia_reply = generate_ia_response(user_id, user_message, user_session)
-            save_user_history(user_id, user_session)
-            return ia_reply
+                return first_message_response
+            
+            # --- LÓGICA PARA EL RESTO DE LA CONVERSACIÓN ---
+            else:
+                system_response = handle_system_message(user_message)
+                if system_response:
+                    user_session["history"].append({"role": "USER", "message": user_message})
+                    user_session["history"].append({"role": "CHATBOT", "message": system_response})
+                    user_session["emoji_last_message"] = contains_emoji(system_response)
+                    save_user_history(user_id, user_session)
+                    return system_response
+
+                ia_reply = generate_ia_response(user_id, user_message, user_session)
+                save_user_history(user_id, user_session)
+                return ia_reply
+
     except Exception as e:
         logging.error(f"Error en /chat: {e}", exc_info=True)
         return "Error en el servidor", 500
