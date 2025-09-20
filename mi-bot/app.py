@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from waitress import serve
 import psycopg2
 from urllib.parse import urlparse
+from cohere.errors import NotFoundError, CohereError  # 👈 import correcto
 
 # --- CONFIGURACIÓN ---
 load_dotenv()
@@ -27,12 +28,10 @@ class ApiKeyManager:
         logging.info(f"Se cargaron {len(self.keys)} llaves de API de Cohere.")
 
     def get_current_client(self):
-        """Devuelve un cliente de Cohere inicializado con la llave actual."""
         api_key = self.keys[self.current_index]
         return cohere.Client(api_key=api_key)
 
     def rotate_to_next_key(self):
-        """Cambia a la siguiente llave de la lista de forma segura."""
         with self.lock:
             self.current_index = (self.current_index + 1) % len(self.keys)
             logging.warning(f"Cambiando a la API key de Cohere número {self.current_index + 1}")
@@ -179,7 +178,7 @@ def generate_ia_response(user_id, user_message, user_session):
     try:
         current_cohere_client = key_manager.get_current_client()
         response = current_cohere_client.chat(
-            model="command-r",  # modelo válido (command-r-plus fue eliminado)
+            model="command-a-03-2025",  # modelo actualizado válido
             preamble=instrucciones_sistema,
             message=user_message,
             chat_history=cohere_history,
@@ -187,10 +186,21 @@ def generate_ia_response(user_id, user_message, user_session):
         )
         ia_reply = response.text.strip()
 
-    except cohere.errors.CohereAPIError as e:  # Manejo correcto de error
+    except (CohereError, NotFoundError) as e:  # 👈 aquí manejamos cualquier error de Cohere
         logging.error(f"Error con la API de Cohere: {e}. Rotando a la siguiente llave.")
-        key_manager.rotate_to_next_key()
-        ia_reply = "mmm tuve un problemita, intenta de nuevo porfa 😅"
+        try:
+            current_cohere_client = key_manager.rotate_to_next_key()
+            response = current_cohere_client.chat(
+                model="command-a-03-2025",
+                preamble=instrucciones_sistema,
+                message=user_message,
+                chat_history=cohere_history,
+                temperature=0.9
+            )
+            ia_reply = response.text.strip()
+        except Exception as e2:
+            logging.error(f"Error tras rotar key: {e2}")
+            ia_reply = "mmm tuve un problemita, intenta de nuevo porfa 😅"
     except Exception as e:
         logging.error(f"Error inesperado con Cohere: {e}")
         ia_reply = "mmm me perdi jaja 😅"
