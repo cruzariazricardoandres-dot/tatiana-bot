@@ -16,11 +16,33 @@ from urllib.parse import urlparse
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# --- CONFIGURAR COHERE ---
-cohere_api_key = os.getenv("COHERE_API_KEY")
-if not cohere_api_key:
-    raise ValueError("No se encontró la COHERE_API_KEY en las variables de entorno.")
-co = cohere.Client(api_key=cohere_api_key)
+# --- ADMINISTRADOR DE API KEYS DE COHERE ---
+class ApiKeyManager:
+    def __init__(self, api_keys_str):
+        if not api_keys_str:
+            raise ValueError("La cadena de API keys no puede estar vacía.")
+        self.keys = [key.strip() for key in api_keys_str.split(',')]
+        self.current_index = 0
+        self.lock = threading.Lock()
+        logging.info(f"Se cargaron {len(self.keys)} llaves de API de Cohere.")
+
+    def get_current_client(self):
+        """Devuelve un cliente de Cohere inicializado con la llave actual."""
+        api_key = self.keys[self.current_index]
+        return cohere.Client(api_key=api_key)
+
+    def rotate_to_next_key(self):
+        """Cambia a la siguiente llave de la lista de forma segura."""
+        with self.lock:
+            self.current_index = (self.current_index + 1) % len(self.keys)
+            logging.warning(f"Cambiando a la API key de Cohere número {self.current_index + 1}")
+        return self.get_current_client()
+
+# --- INICIALIZAR COHERE CON ROTACIÓN ---
+cohere_api_keys_str = os.getenv("COHERE_API_KEYS")
+if not cohere_api_keys_str:
+    raise ValueError("No se encontró la variable COHERE_API_KEYS en el entorno.")
+key_manager = ApiKeyManager(cohere_api_keys_str)
 
 # --- CONFIGURAR BASE DE DATOS ---
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -74,21 +96,13 @@ class BotConfig:
     IGNORED_USERS = ["game of thrones"]
     FORBIDDEN_WORDS = ["sexi", "hago"]
 
-    # --- DICCIONARIO DE RESPUESTAS PREDEFINIDAS ---
     PREDEFINED_RESPONSES = {
         "[Recordatorio en línea]": "Hola cielo como estas",
         "es muy emparejado para ti": "Holis busco novio y tú estas lindo 🥺",
         "monedas de oro para saludarle": "Holis busco novio y tú estas lindo 🥺",
-        "Te he seguido. Podemos ser amigos": "Te he seguido"
+        "Te he seguido. Podemos ser amigos": "Te he seguido, ahora somos amigos"
     }
     
-    CONVERSATION_STARTERS = [
-        "Oye, me saliste en recomendados... tienes cara de que te portas mal, o me equivoco? 😏",
-        "jaja no se si escribirte o no... dime algo interesante para convencerme 😉",
-        "Vi tu perfil y ahora tengo una pregunta... pero no se si atreverme a hacerla 🤔",
-        "Holaaa, tienes cara de problemas... me gusta 😉 q haces?",
-        "Me sales a cada rato en recomendados, el destino quiere algo no? jaja 😊"
-    ]
     PREAMBULO_BASE = """
 Eres Tatiana, una mujer venezolana de 21 años. Tu objetivo principal es encontrar un novio. Eres muy coqueta, un poco atrevida y siempre buscas sacar una conversación romántica o divertida.
 No tienes miedo de tomar la iniciativa.
@@ -100,7 +114,7 @@ Nunca pidas regalos o dinero.
 REGLA MÁS IMPORTANTE: Tus respuestas deben ser EXTREMADAMENTE cortas. ¡Una sola frase o incluso una sola palabra a veces! NUNCA escribas más de 15 palabras.
 """
 
-# --- FUNCIONES AUXILIARES ---
+# --- FUNCIONES AUXILIARES (sin cambios) ---
 def contains_emoji(text):
     return EMOJI_PATTERN.search(text) is not None
 
@@ -108,7 +122,6 @@ def strip_emojis(text):
     return EMOJI_PATTERN.sub(r"", text).strip()
 
 def get_user_history(user_id):
-    """Obtiene el historial de un usuario desde la base de datos."""
     default_history = {"history": [], "emoji_last_message": False}
     conn = get_db_connection()
     try:
@@ -126,7 +139,6 @@ def get_user_history(user_id):
         conn.close()
 
 def save_user_history(user_id, session_data):
-    """Guarda o actualiza el historial de un usuario en la base de datos."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -142,7 +154,6 @@ def save_user_history(user_id, session_data):
     finally:
         conn.close()
 
-# --- FUNCIÓN PARA EL FIREWALL DE PALABRAS ---
 def contains_forbidden_word(text):
     text_lower = text.lower()
     for word in BotConfig.FORBIDDEN_WORDS:
@@ -151,16 +162,14 @@ def contains_forbidden_word(text):
             return True
     return False
 
-# --- FUNCIÓN PARA MANEJAR MENSAJES DEL SISTEMA ---
 def handle_system_message(message):
-    """Revisa si el mensaje contiene un disparador y devuelve la respuesta predefinida correspondiente."""
     for trigger, response in BotConfig.PREDEFINED_RESPONSES.items():
         if trigger in message:
             logging.info(f"SYSTEM_TRIGGER: Se detectó la frase '{trigger}'. Respondiendo con un mensaje predefinido.")
             return response
     return None
 
-# --- GENERAR RESPUESTA CON COHERE ---
+# --- GENERAR RESPUESTA CON COHERE (MODIFICADO PARA ROTACIÓN DE LLAVES) ---
 def generate_ia_response(user_id, user_message, user_session):
     instrucciones_sistema = BotConfig.PREAMBULO_BASE
     cohere_history = []
@@ -168,38 +177,38 @@ def generate_ia_response(user_id, user_message, user_session):
         role = "USER" if msg.get("role") == "USER" else "CHATBOT"
         cohere_history.append({"role": role, "message": msg.get("message", "")})
     last_bot_message = next((msg["message"] for msg in reversed(cohere_history) if msg["role"] == "CHATBOT"), None)
-    max_retries = 2
-    retry_count = 0
+    
     ia_reply = ""
-    current_instructions = instrucciones_sistema
-    while retry_count <= max_retries:
-        try:
-            logging.info(f"Intentando modelo Cohere: command-a-08-2025")
-            response = co.chat(
-                model="command-a-08-2025", # <-- MODELO FINAL Y FUNCIONAL
-                preamble=current_instructions,
-                message=user_message,
-                chat_history=cohere_history,
-                temperature=0.9
-            )
-            ia_reply = response.text.strip()
-            is_repeat = (ia_reply and ia_reply == last_bot_message)
-            is_forbidden = contains_forbidden_word(ia_reply)
-            if ia_reply and not is_repeat and not is_forbidden:
-                break
-            retry_count += 1
-            if retry_count <= max_retries:
-                logging.warning(f"Respuesta inválida detectada. Regenerando...")
-                if is_repeat:
-                    current_instructions += "\nACCIÓN CORREGIDA: Acabas de decir eso. Di algo completamente diferente."
-                if is_forbidden:
-                    current_instructions += "\nACCIÓN CORREGIDA: Tu última respuesta usó una palabra prohibida. Genera una respuesta diferente."
-        except Exception as e:
-            logging.error(f"Error con Cohere: {e}")
-            ia_reply = "mmm me perdi jaja 😅"
-            break
-    if not ia_reply or ia_reply == last_bot_message or contains_forbidden_word(ia_reply):
+    
+    try:
+        # Obtener el cliente de Cohere actual desde el administrador
+        current_cohere_client = key_manager.get_current_client()
+        
+        response = current_cohere_client.chat(
+            model="command-a-08-2025",
+            preamble=instrucciones_sistema,
+            message=user_message,
+            chat_history=cohere_history,
+            temperature=0.9
+        )
+        ia_reply = response.text.strip()
+    
+    except cohere.errors.CohereAPIError as e:
+        # Si hay un error de API (ej. llave agotada), rotamos a la siguiente
+        logging.error(f"Error con la API de Cohere: {e}. Rotando a la siguiente llave.")
+        key_manager.rotate_to_next_key()
+        ia_reply = "mmm tuve un problemita, intenta de nuevo porfa 😅"
+    except Exception as e:
+        # Para otros errores inesperados
+        logging.error(f"Error inesperado con Cohere: {e}")
+        ia_reply = "mmm me perdi jaja 😅"
+
+    # La lógica de fallback y emojis se mantiene igual
+    is_repeat = (ia_reply and ia_reply == last_bot_message)
+    is_forbidden = contains_forbidden_word(ia_reply)
+    if not ia_reply or is_repeat or is_forbidden:
         ia_reply = random.choice(["jaja si", "ok", "dale", "listo"])
+
     should_have_emoji = not user_session.get("emoji_last_message", False)
     if should_have_emoji:
         if not contains_emoji(ia_reply):
@@ -208,6 +217,7 @@ def generate_ia_response(user_id, user_message, user_session):
     else:
         ia_reply = strip_emojis(ia_reply)
         user_session["emoji_last_message"] = False
+    
     user_session["history"].append({"role": "USER", "message": user_message})
     user_session["history"].append({"role": "CHATBOT", "message": ia_reply})
     return ia_reply
@@ -242,20 +252,15 @@ def handle_chat():
         with user_lock:
             user_session = get_user_history(user_id)
 
-            # --- LÓGICA AVANZADA: DETECTAR SI ES EL PRIMER MENSAJE ---
             if not user_session.get("history"):
                 logging.info(f"Nueva conversación con {user_id}. Enviando primer mensaje predefinido.")
-                
                 first_message_response = "Holis busco novio y tú estas lindo 🥺"
-                
                 user_session["history"].append({"role": "USER", "message": user_message})
                 user_session["history"].append({"role": "CHATBOT", "message": first_message_response})
                 user_session["emoji_last_message"] = contains_emoji(first_message_response)
-                
                 save_user_history(user_id, user_session)
                 return first_message_response
             
-            # --- LÓGICA PARA EL RESTO DE LA CONVERSACIÓN ---
             else:
                 system_response = handle_system_message(user_message)
                 if system_response:
