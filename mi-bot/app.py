@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from waitress import serve
 import psycopg2
 from urllib.parse import urlparse
-from cohere.errors import NotFoundError, CohereError  # 👈 import correcto
+from cohere.errors import NotFoundError  # ✅ solo este
 
 # --- CONFIGURACIÓN ---
 load_dotenv()
@@ -178,7 +178,7 @@ def generate_ia_response(user_id, user_message, user_session):
     try:
         current_cohere_client = key_manager.get_current_client()
         response = current_cohere_client.chat(
-            model="command-a-03-2025",  # modelo actualizado válido
+            model="command-r-plus",  # ✅ modelo disponible
             preamble=instrucciones_sistema,
             message=user_message,
             chat_history=cohere_history,
@@ -186,21 +186,10 @@ def generate_ia_response(user_id, user_message, user_session):
         )
         ia_reply = response.text.strip()
 
-    except (CohereError, NotFoundError) as e:  # 👈 aquí manejamos cualquier error de Cohere
-        logging.error(f"Error con la API de Cohere: {e}. Rotando a la siguiente llave.")
-        try:
-            current_cohere_client = key_manager.rotate_to_next_key()
-            response = current_cohere_client.chat(
-                model="command-a-03-2025",
-                preamble=instrucciones_sistema,
-                message=user_message,
-                chat_history=cohere_history,
-                temperature=0.9
-            )
-            ia_reply = response.text.strip()
-        except Exception as e2:
-            logging.error(f"Error tras rotar key: {e2}")
-            ia_reply = "mmm tuve un problemita, intenta de nuevo porfa 😅"
+    except NotFoundError as e:
+        logging.error(f"Modelo no encontrado o removido: {e}.")
+        ia_reply = "El modelo ya no está disponible 😅"
+
     except Exception as e:
         logging.error(f"Error inesperado con Cohere: {e}")
         ia_reply = "mmm me perdi jaja 😅"
