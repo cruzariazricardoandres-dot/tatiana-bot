@@ -18,10 +18,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # --- ADMINISTRADOR DE API KEYS DE COHERE ---
 class ApiKeyManager:
-    def __init__(self, api_keys_str):
-        if not api_keys_str:
-            raise ValueError("La cadena de API keys no puede estar vacía.")
-        self.keys = [key.strip() for key in api_keys_str.split(',')]
+    def __init__(self, api_keys):
+        if not api_keys:
+            raise ValueError("No hay API keys de Cohere configuradas.")
+        self.keys = api_keys
         self.current_index = 0
         self.lock = threading.Lock()
         logging.info(f"Se cargaron {len(self.keys)} llaves de API de Cohere.")
@@ -39,10 +39,11 @@ class ApiKeyManager:
         return self.get_current_client()
 
 # --- INICIALIZAR COHERE CON ROTACIÓN ---
-cohere_api_keys_str = os.getenv("COHERE_API_KEYS")
-if not cohere_api_keys_str:
-    raise ValueError("No se encontró la variable COHERE_API_KEYS en el entorno.")
-key_manager = ApiKeyManager(cohere_api_keys_str)
+cohere_api_keys_env = os.getenv("COHERE_API_KEYS", "")
+cohere_keys = [k.strip() for k in cohere_api_keys_env.split(",") if k.strip()]
+if not cohere_keys:
+    raise ValueError("No se encontraron API keys de Cohere en COHERE_API_KEYS")
+key_manager = ApiKeyManager(cohere_keys)
 
 # --- CONFIGURAR BASE DE DATOS ---
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -50,7 +51,6 @@ if not DATABASE_URL:
     raise ValueError("No se encontró la DATABASE_URL en las variables de entorno.")
 
 def get_db_connection():
-    """Crea y devuelve una conexión a la base de datos."""
     try:
         conn = psycopg2.connect(DATABASE_URL)
         return conn
@@ -59,7 +59,6 @@ def get_db_connection():
         raise
 
 def init_db():
-    """Inicializa la base de datos y crea la tabla si no existe."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -81,13 +80,10 @@ locks_dict_lock = threading.Lock()
 
 # --- DEFINICIONES GLOBALES ---
 EMOJI_PATTERN = re.compile(
-    "["
-    "\U0001F600-\U0001F64F"  # emoticons
-    "\U0001F300-\U0001F5FF"  # symbols & pictographs
-    "\U0001F680-\U0001F6FF"  # transport & map symbols
-    "\U0001F1E0-\U0001F1FF"  # flags (iOS)
-    "]+",
-    flags=re.UNICODE,
+    "[" "\U0001F600-\U0001F64F"
+    "\U0001F300-\U0001F5FF"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F1E0-\U0001F1FF" "]+", flags=re.UNICODE,
 )
 RANDOM_EMOJIS = [" 😉", " 😘", " 😊", " 🔥", " 😈", " 😏", " 🥺"]
 
@@ -102,7 +98,7 @@ class BotConfig:
         "monedas de oro para saludarle": "Holis busco novio y tú estas lindo 🥺",
         "Te he seguido. Podemos ser amigos": "Te he seguido"
     }
-    
+
     PREAMBULO_BASE = """
 Eres Tatiana, una mujer venezolana de 21 años. Tu objetivo principal es encontrar un novio. Eres muy coqueta, un poco atrevida y siempre buscas sacar una conversación romántica o divertida.
 No tienes miedo de tomar la iniciativa.
@@ -114,7 +110,7 @@ Nunca pidas regalos o dinero.
 REGLA MÁS IMPORTANTE: Tus respuestas deben ser EXTREMADAMENTE cortas. ¡Una sola frase o incluso una sola palabra a veces! NUNCA escribas más de 15 palabras.
 """
 
-# --- FUNCIONES AUXILIARES (sin cambios) ---
+# --- FUNCIONES AUXILIARES ---
 def contains_emoji(text):
     return EMOJI_PATTERN.search(text) is not None
 
@@ -169,7 +165,7 @@ def handle_system_message(message):
             return response
     return None
 
-# --- GENERAR RESPUESTA CON COHERE (CON MANEJO DE ERROR CORREGIDO) ---
+# --- GENERAR RESPUESTA CON COHERE ---
 def generate_ia_response(user_id, user_message, user_session):
     instrucciones_sistema = BotConfig.PREAMBULO_BASE
     cohere_history = []
@@ -177,22 +173,21 @@ def generate_ia_response(user_id, user_message, user_session):
         role = "USER" if msg.get("role") == "USER" else "CHATBOT"
         cohere_history.append({"role": role, "message": msg.get("message", "")})
     last_bot_message = next((msg["message"] for msg in reversed(cohere_history) if msg["role"] == "CHATBOT"), None)
-    
+
     ia_reply = ""
-    
+
     try:
         current_cohere_client = key_manager.get_current_client()
-        
         response = current_cohere_client.chat(
-            model="command-r-plus", # <-- Modelo actualizado
+            model="command-r",  # modelo válido (command-r-plus fue eliminado)
             preamble=instrucciones_sistema,
             message=user_message,
             chat_history=cohere_history,
             temperature=0.9
         )
         ia_reply = response.text.strip()
-    
-    except cohere.CohereError as e: # <-- ERROR CORREGIDO
+
+    except cohere.errors.CohereAPIError as e:  # Manejo correcto de error
         logging.error(f"Error con la API de Cohere: {e}. Rotando a la siguiente llave.")
         key_manager.rotate_to_next_key()
         ia_reply = "mmm tuve un problemita, intenta de nuevo porfa 😅"
@@ -213,12 +208,12 @@ def generate_ia_response(user_id, user_message, user_session):
     else:
         ia_reply = strip_emojis(ia_reply)
         user_session["emoji_last_message"] = False
-    
+
     user_session["history"].append({"role": "USER", "message": user_message})
     user_session["history"].append({"role": "CHATBOT", "message": ia_reply})
     return ia_reply
 
-# --- FLASK API (sin cambios) ---
+# --- FLASK API ---
 app = Flask(__name__)
 
 @app.route("/chat", methods=["POST"])
@@ -244,7 +239,7 @@ def handle_chat():
             if user_id not in user_locks:
                 user_locks[user_id] = threading.Lock()
             user_lock = user_locks[user_id]
-        
+
         with user_lock:
             user_session = get_user_history(user_id)
 
@@ -256,7 +251,7 @@ def handle_chat():
                 user_session["emoji_last_message"] = contains_emoji(first_message_response)
                 save_user_history(user_id, user_session)
                 return first_message_response
-            
+
             else:
                 system_response = handle_system_message(user_message)
                 if system_response:
