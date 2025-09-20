@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from waitress import serve
 import psycopg2
 from urllib.parse import urlparse
-from cohere.errors import NotFoundError  # ✅ solo este
+from cohere.errors import NotFoundError  # ✅ correcto
 
 # --- CONFIGURACIÓN ---
 load_dotenv()
@@ -178,7 +178,7 @@ def generate_ia_response(user_id, user_message, user_session):
     try:
         current_cohere_client = key_manager.get_current_client()
         response = current_cohere_client.chat(
-            model="command-r-plus",  # ✅ modelo disponible
+            model="command-a-03-2025",  # ✅ modelo vigente
             preamble=instrucciones_sistema,
             message=user_message,
             chat_history=cohere_history,
