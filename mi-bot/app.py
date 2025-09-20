@@ -100,7 +100,7 @@ class BotConfig:
         "[Recordatorio en línea]": "Hola cielo como estas",
         "es muy emparejado para ti": "Holis busco novio y tú estas lindo 🥺",
         "monedas de oro para saludarle": "Holis busco novio y tú estas lindo 🥺",
-        "Te he seguido. Podemos ser amigos": "Te he seguido, ahora somos amigos"
+        "Te he seguido. Podemos ser amigos": "Te he seguido"
     }
     
     PREAMBULO_BASE = """
@@ -169,7 +169,7 @@ def handle_system_message(message):
             return response
     return None
 
-# --- GENERAR RESPUESTA CON COHERE (MODIFICADO PARA ROTACIÓN DE LLAVES) ---
+# --- GENERAR RESPUESTA CON COHERE (CON MANEJO DE ERROR CORREGIDO) ---
 def generate_ia_response(user_id, user_message, user_session):
     instrucciones_sistema = BotConfig.PREAMBULO_BASE
     cohere_history = []
@@ -181,11 +181,10 @@ def generate_ia_response(user_id, user_message, user_session):
     ia_reply = ""
     
     try:
-        # Obtener el cliente de Cohere actual desde el administrador
         current_cohere_client = key_manager.get_current_client()
         
         response = current_cohere_client.chat(
-            model="command-a-08-2025",
+            model="command-r-plus", # <-- Modelo actualizado
             preamble=instrucciones_sistema,
             message=user_message,
             chat_history=cohere_history,
@@ -193,17 +192,14 @@ def generate_ia_response(user_id, user_message, user_session):
         )
         ia_reply = response.text.strip()
     
-    except cohere.errors.CohereAPIError as e:
-        # Si hay un error de API (ej. llave agotada), rotamos a la siguiente
+    except cohere.CohereError as e: # <-- ERROR CORREGIDO
         logging.error(f"Error con la API de Cohere: {e}. Rotando a la siguiente llave.")
         key_manager.rotate_to_next_key()
         ia_reply = "mmm tuve un problemita, intenta de nuevo porfa 😅"
     except Exception as e:
-        # Para otros errores inesperados
         logging.error(f"Error inesperado con Cohere: {e}")
         ia_reply = "mmm me perdi jaja 😅"
 
-    # La lógica de fallback y emojis se mantiene igual
     is_repeat = (ia_reply and ia_reply == last_bot_message)
     is_forbidden = contains_forbidden_word(ia_reply)
     if not ia_reply or is_repeat or is_forbidden:
@@ -222,7 +218,7 @@ def generate_ia_response(user_id, user_message, user_session):
     user_session["history"].append({"role": "CHATBOT", "message": ia_reply})
     return ia_reply
 
-# --- FLASK API (CON LÓGICA DE PRIMER MENSAJE) ---
+# --- FLASK API (sin cambios) ---
 app = Flask(__name__)
 
 @app.route("/chat", methods=["POST"])
