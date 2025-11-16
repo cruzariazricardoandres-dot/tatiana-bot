@@ -186,7 +186,7 @@ papasito y de donde salio tan lindo
             "papasito y de donde salio tan lindo dime",
             "ay corazon me ganaste con esa sonrisa",
             "quiubo mi rey q sorpresa tan buena",
-            "juepucha q hombre tan mas lindo ve",
+            "Q hombre tan mas lindo ve",
             "uy si q estas emparejado pa mi",
             "ay no me digas eso q me sonrojo",
             "veci tiene una mirada q enamora",
@@ -751,3 +751,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     logging.info(f"Servicio iniciado en puerto {port}")
     serve(app, host="0.0.0.0", port=port, threads=20)
+
