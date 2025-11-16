@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # PALABRAS PROHIBIDAS
 FORBIDDEN_WORDS = [
     "sexi", "hago", "facebook", "instagram", "whatsapp", "tiktok", "Viajar", "Agarrar", "salsa", "Salsa", "asustes",
-    "gustas", "gustaria", "gusto", "coincidencia", "regalo", "soy", "aburro", "tele", "Coger", "Ig", "Tlg", "Llamar", "Sexo", "Celular"
+    "gustas", "gustaria", "gusto", "coincidencia", "regalo", "aburro", "tele", "Coger", "Tlg", "Llamar", "Sexo", "Celular"
 ]
 
 # --- ADMINISTRADOR DE API KEYS ---
@@ -395,3 +395,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     logging.info(f"🤖 Servicio ChatBot Mejorado iniciado en puerto {port}")
     serve(app, host="0.0.0.0", port=port, threads=10)
+
