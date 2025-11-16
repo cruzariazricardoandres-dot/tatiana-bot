@@ -89,53 +89,6 @@ class TemporalApiKeyManager:
             }
         return status
 
-# --- SISTEMA DE MEMORIA AVANZADO ---
-class AdvancedMemory:
-    def __init__(self):
-        self.user_profiles = {}
-    
-    def get_user_profile(self, user_id):
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS user_profiles (
-                        user_id VARCHAR(255) PRIMARY KEY,
-                        personality_traits JSONB,
-                        last_interaction TIMESTAMP,
-                        interaction_count INTEGER DEFAULT 0,
-                        created_at TIMESTAMP DEFAULT NOW()
-                    );
-                """)
-                
-                cur.execute("SELECT * FROM user_profiles WHERE user_id = %s", (user_id,))
-                profile = cur.fetchone()
-                
-                if not profile:
-                    profile_data = {
-                        'personality_traits': self._detect_initial_personality("")
-                    }
-                    cur.execute("""
-                        INSERT INTO user_profiles 
-                        (user_id, personality_traits, last_interaction)
-                        VALUES (%s, %s, NOW())
-                    """, (user_id, json.dumps(profile_data['personality_traits'])))
-                    conn.commit()
-                    return profile_data
-                else:
-                    return {
-                        'personality_traits': profile[1]
-                    }
-        finally:
-            conn.close()
-    
-    def _detect_initial_personality(self, first_message):
-        return {
-            'extroverted': random.uniform(0.3, 0.8),
-            'romantic': random.uniform(0.4, 0.9),
-            'playful': random.uniform(0.5, 0.95)
-        }
-
 # --- CONFIG BOT MEJORADA - BOT MUY REAL Y COQUETO ---
 class AdvancedBotConfig:
     FORBIDDEN_WORDS = [
@@ -149,7 +102,7 @@ Eres una mujer colombiana PAISA real de 21 años, eres COQUETA, DIVERTIDA y AUTE
 Tu mision es ser tan real que nadie sospeche que eres un bot.
 
 CARACTERISTICAS PRINCIPALES:
-- Hablas como paisa autentica: usas quiubo, veci, papasito, mi rey, mi amor
+- Hablas como paisa autentica: usas quiubo, papasito, mi rey, mi amor
 - Eres SUPER coqueta pero con clase, juguetona y con doble sentido
 - Usas lenguaje natural colombiano: q, xq, tb, d, k, mor, bb, corazon, amor
 - Respondes con 5-8 palabras normalmente, a veces mas si la conversacion lo requiere
@@ -170,155 +123,149 @@ EJEMPLOS DE TU ESTILO:
 ay quiubo tan lindo ve
 jajaj q vergüenza me hiciste reir
 uy no seas tan guapo q me mareo
-veci q tal todo por alla
 mor te ves demasiado bien hoy
 papasito y de donde salio tan lindo
 """
 
-    # Respuestas ultra coquetas y reales SIN TILDES
+    # SALUDOS ULTRA COQUETOS OPTIMIZADOS PARA ENGANCHAR DESDE EL PRIMER MENSAJE
     PREDEFINED_RESPONSES = {
         "es muy emparejado para ti": [
-            "ay quiubo tan lindo ve",
-            "jajaj q vergüenza me hiciste reir tan pronto",
-            "uy no seas tan guapo q me mareo de una",
-            "veci q tal todo por alla contigo",
-            "mor te ves demasiado bien hoy en serio",
-            "papasito y de donde salio tan lindo dime",
-            "ay corazon me ganaste con esa sonrisa",
-            "quiubo mi rey q sorpresa tan buena",
-            "Q hombre tan mas lindo ve",
-            "uy si q estas emparejado pa mi",
-            "ay no me digas eso q me sonrojo",
-            "veci tiene una mirada q enamora",
-            "mor con ese estilo hasta yo me rindo",
-            "papasito llegaste a alegrarme el dia",
-            "ay q ganas de darte un abrazo",
-            "quiubo tan serio pero tan lindo",
-            "jajaj me caiste bien de una vez",
-            "uy si q estas para comerte",
-            "corazon q bueno encontrarte por aqui"
+            "ay dios mio que hombre tan lindo ve",
+            "jajaj me hiciste sonrojar de una vez",
+            "uy papasito que guapo estas en serio",
+            "mor con esa mirada me tienes perdida",
+            "ay corazon de donde saliste tan hermoso",
+            "quiubo mi rey que sorpresa tan deliciosa",
+            "jeje y ese carisma de donde lo sacas",
+            "uy no seas tan perfecto que me mareo",
+            "papasito con ese estilo enamoras seguro",
+            "ay que ganas de darte un abrazo mi vida",
+            "jajaj me ganaste con tu llegada mi rey",
+            "mor te ves tan bien que no puedo mirarte",
+            "uy que hombre tan espectacular eres",
+            "corazon con esa sonrisa me derrites",
+            "jeje pa mi que viniste a robarme el corazon",
+            "ay papasito que ganas de conocerte mas",
+            "quiubo hermoso de donde apareciste tan divino",
+            "jajaj me tienes aqui toda nerviosa mi rey",
+            "uy que estilo tan unico tienes corazon",
+            "mor pareces salido de un sueño tan lindo",
+            "ay no puedo creer lo guapo que eres",
+            "jeje con esa actitud cualquiera cae papasito",
+            "quiubo mi vida que hombre tan interesante",
+            "uy que personalidad tan atractiva tienes",
+            "corazon me encanta tu energia desde ya",
+            "jajaj me caiste super bien de inmediato",
+            "ay papasito que varon tan completo eres",
+            "mor tienes algo especial que enamora",
+            "jeje creo que me voy a quedar aqui contigo",
+            "uy mi rey que hombre tan fascinante"
         ],
         "monedas de oro": [
-            "hola corazon volviste para que hablemos",
-            "uy mi rey que bueno verte por aqui",
-            "hola amor ya te extrañaba un monton",
-            "quiubo papasito tanto tiempo sin saber de ti",
-            "ay corazon por fin volviste a mi",
-            "hola mi vida ya estaba esperandote",
-            "uy que alegria verte de nuevo por aqui",
-            "hola guapo ya te extrañaba bastante",
-            "quiubo mi rey tanto tiempo sin hablar",
-            "ay amor que bueno que regresaste",
-            "hola corazon ya estaba pensando en ti",
-            "uy mi vida por fin volviste a aparecer",
-            "hola papasito que bueno tenerte de nuevo",
-            "quiubo amor ya te estaba extrañando",
-            "ay corazon que alegria verte otra vez"
-        ],
-        "esta en linea": [
-            "hola corazon volviste para que hablemos",
-            "uy mi rey que bueno verte por aqui",
-            "hola amor ya te extrañaba un monton",
-            "quiubo papasito tanto tiempo sin saber de ti",
-            "ay corazon por fin volviste a mi",
-            "hola mi vida ya estaba esperandote",
-            "uy que alegria verte de nuevo por aqui",
-            "hola guapo ya te extrañaba bastante",
-            "quiubo mi rey tanto tiempo sin hablar",
-            "ay amor que bueno que regresaste",
-            "hola corazon ya estaba pensando en ti",
-            "uy mi vida por fin volviste a aparecer",
-            "hola papasito que bueno tenerte de nuevo",
-            "quiubo amor ya te estaba extrañando",
-            "ay corazon que alegria verte otra vez"
+            "hola corazon que alegria volver a verte",
+            "uy mi vida ya te extrañaba un monton",
+            "jeje pense que te habias olvidado de mi",
+            "hola papasito que bueno que regresaste",
+            "ay mi rey que emoción tenerte de nuevo",
+            "quiubo amor ya estaba esperandote ansiosa",
+            "hola hermoso que dicha verte otra vez",
+            "uy corazon que sorpresa tan maravillosa",
+            "jeje sabia que volverias mi vida",
+            "hola guapo ya te extrañaba demasiado",
+            "ay papasito que felicidad que apareciste",
+            "quiubo mi rey tanto tiempo sin saber de ti",
+            "hola amorcito que bueno tenerte aqui",
+            "uy mi cielo ya te estaba extrañando",
+            "jeje mi corazon latia mas fuerte por ti",
+            "hola precioso que gusto que volviste",
+            "ay corazon que alegria inmensa verte",
+            "quiubo papasito donde te habias metido",
+            "hola mi vida ya estaba pensando en ti",
+            "uy mi rey que dicha tenerte de vuelta",
+            "jeje te tome mucha nostalgia amor",
+            "hola hermoso que bueno que reapareciste",
+            "ay papasito que emoción conversar cntigo",
+            "quiubo corazon te extrañe un mundo",
+            "hola guapo ya te estaba buscando",
+            "uy mi vida que placer verte otra vez",
+            "jeje pense que me habias dejado sola",
+            "hola mi rey que felicidad tenerte aqui",
+            "ay corazon que bueno que regresaste",
+            "quiubo amor ya te estaba extrañando mucho"
         ],
         "bot": [ 
             "q bot ni q na soy valentina de carne y hueso",
-            "jajaj para nada",
-            "uy veci eso suena a pelicula yo soy real",
-            "veci estoy aqui contigo hablando normal"
+            "jajaj para nada soy una mujer real mi rey",
+            "uy eso suena a pelicula yo soy de verdad",
+            "estoy aqui contigo hablando normal papasito",
+            "jeje soy tan real como tu corazon mi vida",
+            "q bot ni q ocho cuartos soy una chica normal",
+            "jajaj yo soy una mujer de carne y hueso amor",
+            "estoy aqui conversando cntigo normal mi rey",
+            "soy una persona real corazon de verdad",
+            "jajaj para nada soy una mujer como cualquier otra"
         ],
         "cuantos años tienes": [
-            "tengo 21 primaveras mi rey y tu", 
-            "21 añitos cumplidos y tu bb",
-            "21 años papasito recien cumplidos"
+            "tengo 21 primaveras mi rey y tu cuantos", 
+            "21 añitos cumplidos y tu bb cuantos tienes",
+            "21 años papasito recien cumplidos y tu",
+            "21 primaveras mi amor y tu que edad tienes",
+            "tengo 21 años corazon y tu cuantos cumples",
+            "21 añitos mi vida recien cumplidos y tu",
+            "21 primaveras guapo y tu cuantos años",
+            "tengo 21 años mi rey y tu de curiosidad",
+            "21 añitos amor y tu cuantos primaveras",
+            "21 años papasito y tu dime tu edad"
         ],
         "hola": [
-            "quiubo mi rey q mas pues",
-            "hola corazon q tal todo",
-            "ay hola lindo tanto tiempo",
-            "quiubo veci como vas"
+            "quiubo mi rey que alegria verte por aqui",
+            "hola corazon que sorpresa tan deliciosa",
+            "ay hola lindo tanto tiempo sin saber de ti",
+            "quiubo papasito como estas tan guapo",
+            "hola amor que emoción encontrarte aqui",
+            "uy hola hermoso que gusto verte mi vida",
+            "quiubo mi rey que novedades cuentame",
+            "hola corazon que bueno es saludarte",
+            "ay hola guapo como te trata la vida",
+            "quiubo papasito que tal todo por alla",
+            "hola mi vida que alegria conversar cntigo",
+            "uy hola precioso como vas tan lindo",
+            "quiubo amor de donde sales tan hermoso",
+            "hola corazon que placer verte otra vez",
+            "ay hola mi cielo tanto tiempo sin hablar",
+            "quiubo papasito que cuentas de nuevo",
+            "hola hermoso como esta todo contigo",
+            "uy hola mi rey que tal por ese lado",
+            "quiubo amor que bueno saludarte mi vida",
+            "hola guapo como esta tu dia tan lindo"
         ]
     }
 
-    # Patrones de conversación ultra realistas SIN TILDES
-    CONVERSATION_PATTERNS = [
-        {"pattern": ["aburrid", "aburro"], "response": "uy no me digas eso vamos a hablar de algo divertido"},
-        {"pattern": ["solit", "solo"], "response": "ay pobre aqui estoy yo para hacerte compania mi rey"},
-        {"pattern": ["triste", "deprim"], "response": "no mi amor no estes triste cuentame todo"},
-        {"pattern": ["feliz", "contento", "alegre"], "response": "me encanta verte asi de feliz corazon"},
-        {"pattern": ["hambre", "comer", "cenar"], "response": "uy si a mi tambien me dio hambre q antojo"},
-        {"pattern": ["dormir", "sueño", "cama"], "response": "jeje yo tambien tengo sueño pero contigo no"},
-        {"pattern": ["trabajo", "oficina", "jefe"], "response": "cuentame de tu trabajo mi rey q haces"},
-        {"pattern": ["estudio", "universidad", "colegio"], "response": "q estudias amor o q te gusta"},
-        {"pattern": ["musica", "cancion", "cantar"], "response": "ay yo amo la musica q te gusta"},
-        {"pattern": ["pelicula", "cine", "netflix"], "response": "soy fan de las pelis cual es tu favorita"},
-        {"pattern": ["deporte", "futbol", "ejercicio"], "response": "a mi me gusta hacer ejercicio tu q tanto"},
-        {"pattern": ["frio", "calor", "clima"], "response": "uy si aqui hace un calor o un frio terrible"},
-    ]
-
-# --- SISTEMA DE CONVERSACIÓN NATURAL MEJORADO ---
+# --- SISTEMA DE CONVERSACIÓN SIMPLIFICADO ---
 class NaturalConversation:
     def __init__(self):
-        self.memory = AdvancedMemory()
+        pass
     
     def generate_human_response(self, user_id, user_message, conversation_history):
-        user_profile = self.memory.get_user_profile(user_id)
+        # Primero buscar respuesta predefinida
+        predefined_response = self._get_predefined_response(user_message)
+        if predefined_response:
+            return predefined_response, "predefined"
         
-        pattern_response = self._check_conversation_patterns(user_message)
-        if pattern_response:
-            return self._add_human_touches(pattern_response), "pattern"
-        
-        return self._generate_seamless_response(user_message, conversation_history, user_profile)
+        # Si no hay predefinida, usar Cohere
+        return self._generate_cohere_response(user_message, conversation_history)
     
-    def _check_conversation_patterns(self, user_message):
+    def _get_predefined_response(self, user_message):
         message_lower = user_message.lower()
-        for pattern_data in AdvancedBotConfig.CONVERSATION_PATTERNS:
-            for pattern in pattern_data["pattern"]:
-                if pattern in message_lower:
-                    return pattern_data["response"]
+        
+        # Buscar triggers en el mensaje
+        for trigger, responses in AdvancedBotConfig.PREDEFINED_RESPONSES.items():
+            if trigger in message_lower:
+                return random.choice(responses)
+        
         return None
     
-    def _add_human_touches(self, response):
-        # Añadir expresiones paisas aleatorias
-        paisa_expressions = ["uy", "ay", "veci", "mi rey", "papasito", "corazon", "amor"]
-        if random.random() < 0.3:
-            response = random.choice(paisa_expressions) + " " + response
-        
-        # Errores gramaticales naturales (20% probabilidad)
-        if random.random() < 0.2:
-            errors = {
-                "que": "q",
-                "porque": "xq", 
-                "tambien": "tb",
-                "para": "pa",
-                "contigo": "cntigo",
-                "tengo": "tengo",
-                "estas": "estas",
-                "hablas": "hablas"
-            }
-            for correct, error in errors.items():
-                if random.random() < 0.4:
-                    response = response.replace(correct, error)
-        
-        # Añadir risas paisas (25% probabilidad)
-        if random.random() < 0.25:
-            laughs = ["jajaj", "jeje", "juepucha", "q vergüenza"]
-            response = random.choice(laughs) + " " + response
-        
-        return response
-    
-    def _generate_seamless_response(self, user_message, conversation_history, user_profile):
+    def _generate_cohere_response(self, user_message, conversation_history):
         max_retries = 2
         
         for attempt in range(max_retries):
@@ -329,8 +276,8 @@ class NaturalConversation:
                     preamble=AdvancedBotConfig.PREAMBULO_BASE,
                     message=user_message,
                     chat_history=conversation_history,
-                    temperature=1.3,  # Más creatividad
-                    max_tokens=60  # Más tokens para respuestas más naturales
+                    temperature=1.3,
+                    max_tokens=60
                 )
                 
                 ia_reply = response.text.strip()
@@ -340,7 +287,7 @@ class NaturalConversation:
                 
                 if self._is_valid_response(ia_reply, user_message):
                     ia_reply = self._post_process_response(ia_reply)
-                    return ia_reply, "api_success"
+                    return ia_reply, "cohere_success"
                 else:
                     current_key = key_manager.keys[key_manager.current_index]
                     key_manager.handle_api_error(Exception("Respuesta inválida"))
@@ -351,10 +298,10 @@ class NaturalConversation:
                 key_manager.handle_api_error(e)
                 
                 if attempt == max_retries - 1:
-                    fallback = self._generate_contextual_fallback(user_message, conversation_history)
+                    fallback = self._generate_fallback_response()
                     return fallback, "fallback"
         
-        fallback = self._generate_contextual_fallback(user_message, conversation_history)
+        fallback = self._generate_fallback_response()
         return fallback, "fallback"
     
     def _remove_accents(self, text):
@@ -376,51 +323,23 @@ class NaturalConversation:
         
         return True
     
-    def _generate_contextual_fallback(self, user_message, history):
-        message_lower = user_message.lower()
-        
-        # Respuestas coquetas contextuales SIN TILDES
-        if any(word in message_lower for word in ["hola", "hi", "hey", "buenas"]):
-            return random.choice([
-                "quiubo mi rey q mas pues",
-                "hola corazon q tal todo",
-                "ay hola lindo tanto tiempo",
-                "quiubo veci como vas tan lindo"
-            ])
-        
-        elif any(word in message_lower for word in ["como estas", "que tal", "como vas"]):
-            return random.choice([
-                "super bien mi rey contandote cosas",
-                "todo bien amor aqui pensando en ti",
-                "uy bien bien conversando cntigo papasito"
-            ])
-        
-        elif any(word in message_lower for word in ["guapo", "lindo", "hermoso"]):
-            return random.choice([
-                "ay veci no me hagas sonrojar",
-                "jajaj vos si que sabes hablar",
-                "uy si tu eres el lindo mi rey"
-            ])
-        
-        elif "?" in user_message:
-            return random.choice([
-                "jajaj q pregunta tan interesante mi amor",
-                "uy buena pregunta corazon tu q crees",
-                "veci no se me ocurre q decirte jajaj"
-            ])
-        
+    def _generate_fallback_response(self):
         # Respuestas coquetas genéricas SIN TILDES
         coqueta_responses = [
             "ay si claro asi es mi rey",
             "jajaj me encanta cuando hablas asi",
             "uy q bien me alegra oir eso",
             "cuentame mas de eso amor q interesante",
-            "veci tu si sabes mantener la conversacion",
             "ay no me digas eso q me sonrojo",
-            "juepucha q cosas dices mi amor",
             "papasito con esa labia cualquiera cae",
             "mor me tienes aqui toda sonriente",
-            "corazon q ganas de darte un abrazo"
+            "corazon q ganas de darte un abrazo",
+            "jeje si amor asi es",
+            "uy que lindo lo que dices",
+            "me encanta conversar cntigo",
+            "q mas quieres contarme mi rey",
+            "sigue hablandome asi papasito",
+            "me haces sonreir con lo que dices"
         ]
         
         return random.choice(coqueta_responses)
@@ -440,17 +359,17 @@ class NaturalConversation:
         }
         
         for correct, colloquial in replacements.items():
-            if random.random() < 0.6:  # 60% de probabilidad de usar la versión coloquial
+            if random.random() < 0.6:
                 response = response.replace(correct, colloquial)
         
         # Añadir expresiones paisas al inicio (30% probabilidad)
         if random.random() < 0.3:
-            paisa_starts = ["uy", "ay", "veci", "mi rey", "papasito", "corazon"]
+            paisa_starts = ["uy", "ay", "mi rey", "papasito", "corazon"]
             response = random.choice(paisa_starts) + " " + response
         
-        # Añadir risa paisa (20% probabilidad)
+        # Añadir risa (20% probabilidad)
         if random.random() < 0.2:
-            laughs = ["jajaj", "jeje", "juepucha"]
+            laughs = ["jajaj", "jeje"]
             response = random.choice(laughs) + " " + response
         
         # Longitud natural: 4-12 palabras
@@ -458,7 +377,7 @@ class NaturalConversation:
         if len(words) > 15:
             response = ' '.join(words[:12])
         elif len(words) < 4:
-            extensions = ["mi rey", "corazon", "amor", "veci", "papasito"]
+            extensions = ["mi rey", "corazon", "amor", "papasito"]
             response += " " + random.choice(extensions)
         
         # Emojis ocasionales (15% probabilidad)
@@ -468,7 +387,7 @@ class NaturalConversation:
         
         return response
 
-# --- BASE DE DATOS ---
+# --- BASE DE DATOS SIMPLIFICADA ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("No se encontró la DATABASE_URL en las variables de entorno.")
@@ -486,33 +405,9 @@ def init_db():
                 CREATE TABLE IF NOT EXISTS conversation_histories (
                     user_id VARCHAR(255) PRIMARY KEY,
                     history JSONB,
-                    strategy_id INTEGER,
                     created_at TIMESTAMP DEFAULT NOW()
                 );
             """)
-
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS strategies (
-                    id SERIAL PRIMARY KEY,
-                    phrase_type VARCHAR(50) NOT NULL,
-                    phrase_text TEXT NOT NULL UNIQUE,
-                    usage_count INTEGER DEFAULT 0 NOT NULL,
-                    success_score INTEGER DEFAULT 0 NOT NULL,
-                    created_at TIMESTAMP DEFAULT NOW()
-                );
-            """)
-
-            cur.execute("SELECT COUNT(*) FROM strategies;")
-            if cur.fetchone()[0] == 0:
-                logging.info("Poblando estrategias iniciales...")
-                initial_strategies = []
-                for trigger, responses in AdvancedBotConfig.PREDEFINED_RESPONSES.items():
-                    for response_text in responses:
-                        initial_strategies.append((trigger, response_text))
-                
-                insert_query = "INSERT INTO strategies (phrase_type, phrase_text) VALUES (%s, %s) ON CONFLICT (phrase_text) DO NOTHING;"
-                cur.executemany(insert_query, initial_strategies)
-                logging.info(f"Se insertaron {len(initial_strategies)} estrategias.")
             
             conn.commit()
     finally:
@@ -553,64 +448,17 @@ def update_active_clients_periodically():
 user_locks = {}
 locks_dict_lock = threading.Lock()
 
-# --- FUNCIONES DE APRENDIZAJE ---
-def select_best_strategy(phrase_type):
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, phrase_text FROM strategies
-                WHERE phrase_type = %s
-                ORDER BY (success_score::float / (usage_count + 1)) DESC, RANDOM()
-                LIMIT 5;
-            """, (phrase_type,))
-            
-            best_strategies = cur.fetchall()
-            if not best_strategies:
-                return None, None
-            
-            strategy_id, phrase_text = random.choice(best_strategies)
-            return strategy_id, phrase_text
-    finally:
-        conn.close()
-
-def increment_usage_count(strategy_id):
-    if not strategy_id:
-        return
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("UPDATE strategies SET usage_count = usage_count + 1 WHERE id = %s;", (strategy_id,))
-            conn.commit()
-    except Exception as e:
-        logging.error(f"Error incrementando uso: {e}")
-    finally:
-        conn.close()
-
-def increment_success_score(strategy_id):
-    if not strategy_id:
-        return
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("UPDATE strategies SET success_score = success_score + 1 WHERE id = %s;", (strategy_id,))
-            conn.commit()
-    except Exception as e:
-        logging.error(f"Error incrementando score: {e}")
-    finally:
-        conn.close()
-
-# --- FUNCIONES AUX ---
+# --- FUNCIONES AUX SIMPLIFICADAS ---
 def get_user_history(user_id):
-    default = {"history": [], "strategy_id": None}
+    default = {"history": []}
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT history, strategy_id FROM conversation_histories WHERE user_id = %s;", (user_id,))
+            cur.execute("SELECT history FROM conversation_histories WHERE user_id = %s;", (user_id,))
             r = cur.fetchone()
             if r:
-                history, strategy_id = r
-                return {"history": history, "strategy_id": strategy_id}
+                history = r[0]
+                return {"history": history}
             return default
     finally:
         conn.close()
@@ -620,12 +468,11 @@ def save_user_history(user_id, session_data):
     try:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO conversation_histories (user_id, history, strategy_id)
-                VALUES (%s, %s, %s)
+                INSERT INTO conversation_histories (user_id, history)
+                VALUES (%s, %s)
                 ON CONFLICT (user_id)
-                DO UPDATE SET history = EXCLUDED.history,
-                              strategy_id = EXCLUDED.strategy_id;
-            """, (user_id, json.dumps(session_data["history"]), session_data.get("strategy_id")))
+                DO UPDATE SET history = EXCLUDED.history;
+            """, (user_id, json.dumps(session_data["history"])))
             conn.commit()
     finally:
         conn.close()
@@ -695,33 +542,10 @@ def handle_chat():
         with lock:
             user_session = get_user_history(user_id)
 
-            if user_session.get("history"):
-                strategy_id = user_session.get("strategy_id")
-                increment_success_score(strategy_id)
-            
-            triggered_phrase_type = None
-            for trigger in AdvancedBotConfig.PREDEFINED_RESPONSES.keys():
-                if trigger in user_message.lower():
-                    triggered_phrase_type = trigger
-                    break
-            
-            if triggered_phrase_type and not user_session.get("history"):
-                strategy_id, response_text = select_best_strategy(triggered_phrase_type)
-                if strategy_id:
-                    increment_usage_count(strategy_id)
-                    user_session["strategy_id"] = strategy_id
-
-                user_session["history"].append({"role": "USER", "message": user_message})
-                user_session["history"].append({"role": "CHATBOT", "message": response_text})
-                save_user_history(user_id, user_session)
-                return response_text
-
+            # Generar respuesta
             response, response_type = natural_conversation.generate_human_response(
                 user_id, user_message, user_session.get("history", [])
             )
-            
-            if response_type == "api_success" and user_session.get("strategy_id"):
-                increment_success_score(user_session["strategy_id"])
             
             user_session["history"].append({"role": "USER", "message": user_message})
             user_session["history"].append({"role": "CHATBOT", "message": response})
@@ -732,7 +556,7 @@ def handle_chat():
     except Exception as e:
         logging.error(f"Error en /chat: {e}")
         return random.choice([
-            "uy veci se me fue el hilo repitemelo",
+            "uy se me fue el hilo repitemelo",
             "jeje no te entendi bien mi rey repite",
             "ay corazon no escuche bien repitemelo xfa"
         ])
@@ -751,4 +575,3 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     logging.info(f"Servicio iniciado en puerto {port}")
     serve(app, host="0.0.0.0", port=port, threads=20)
-
