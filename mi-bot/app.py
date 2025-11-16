@@ -177,7 +177,7 @@ class HybridChat:
                     message=user_message,
                     chat_history=conversation_history,
                     temperature=1.2,
-                    max_tokens=100  # Más tokens para respuestas completas
+                    max_tokens=35  # Más tokens para respuestas completas
                 )
                 
                 reply = response.text.strip()
@@ -395,4 +395,5 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     logging.info(f"🤖 Servicio ChatBot Mejorado iniciado en puerto {port}")
     serve(app, host="0.0.0.0", port=port, threads=10)
+
 
