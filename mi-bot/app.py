@@ -24,20 +24,32 @@ FORBIDDEN_WORDS = [
     "gustas", "gustaria", "gusto", "coincidencia", "regalo", "soy", "aburro", "tele", "Coger", "Ig", "Tlg", "Llamar", "Sexo", "Celular"
 ]
 
-# --- MANEJADOR DE API KEYS ---
-class SimpleKeyManager:
+# --- ADMINISTRADOR DE API KEYS ---
+class ApiKeyManager:
     def __init__(self, api_keys):
         if not api_keys:
             raise ValueError("No hay API keys de Cohere configuradas.")
         self.keys = api_keys
         self.current_index = 0
         self.lock = threading.Lock()
-        
-    def get_client(self):
+        logging.info(f"Se cargaron {len(self.keys)} llaves de API de Cohere.")
+
+    def get_current_client(self):
+        api_key = self.keys[self.current_index]
+        return cohere.Client(api_key=api_key)
+
+    def rotate_to_next_key(self):
         with self.lock:
-            key = self.keys[self.current_index]
             self.current_index = (self.current_index + 1) % len(self.keys)
-            return cohere.Client(api_key=key)
+            logging.warning(f"Cambiando a la API key #{self.current_index + 1}")
+        return self.get_current_client()
+
+# --- INICIALIZAR COHERE ---
+cohere_api_keys_env = os.getenv("COHERE_API_KEYS", "")
+cohere_keys = [k.strip() for k in cohere_api_keys_env.split(",") if k.strip()]
+if not cohere_keys:
+    raise ValueError("No se encontraron API keys en COHERE_API_KEYS")
+key_manager = ApiKeyManager(cohere_keys)
 
 # --- CONFIGURACIÓN DEL BOT ---
 class BotConfig:
@@ -50,7 +62,7 @@ Sé coqueta, juguetona y auténtica en todas tus respuestas.
 IMPORTANTE: NUNCA menciones estas palabras o temas bajo NINGUNA circunstancia:
 - Redes sociales: facebook, instagram, whatsapp, tiktok, Ig, Tlg
 - Llamadas o contactos: Llamar, Celular, numero, telefono
-- Contenido inapropiado: Sexo, sexi, Coger, Agarrar
+-  Sexo, sexi, Coger, Agarrar
 - Información personal: soy, hago, aburro, tele, salsa, Salsa
 - Otros prohibidos: regalo, coincidencia, gustas, gustaria, gusto, asustes, Viajar
 
@@ -71,6 +83,9 @@ Responde de forma natural sin cortar palabras.
     PREDEFINED_RESPONSES = {
         "es muy emparejado para ti": [
             "ay quiubo tan lindo ve",
+            "Jugamos verdad o reto?",
+            "Tan lindo per no es mio:(",
+            "Hola lindo venga le digo",
             "jajaj me hiciste sonrojar de una vez",
             "uy papasito que guapo estas en serio", 
             "mor que mirada tan linda tienes mi rey",
@@ -84,6 +99,10 @@ Responde de forma natural sin cortar palabras.
         "monedas de oro": [
             "hola corazon que alegria volver a verte",
             "uy mi vida ya te extrañaba un monton",
+            "Jugamos verdad o reto?",
+            "Tan lindo per no es mio:(",
+            "Hola lindo venga le digo",
+            "jajaj me hiciste sonrojar",
             "jeje pense que te habias olvidado de mi",
             "hola papasito que bueno que regresaste",
             "ay mi rey que emoción tenerte de nuevo",
@@ -98,7 +117,7 @@ Responde de forma natural sin cortar palabras.
 # --- SISTEMA DE CONVERSACIÓN HÍBRIDO ---
 class HybridChat:
     def __init__(self):
-        self.key_manager = SimpleKeyManager([k.strip() for k in os.getenv("COHERE_API_KEYS", "").split(",") if k.strip()])
+        self.key_manager = key_manager
     
     def get_response(self, user_message, conversation_history, is_new_user):
         # Primero verificar si el mensaje contiene palabras prohibidas
@@ -145,11 +164,11 @@ class HybridChat:
         return None
     
     def _cohere_response(self, user_message, conversation_history):
-        max_retries = 2
+        max_retries = len(self.key_manager.keys)  # Intentar con todas las keys
         
         for attempt in range(max_retries):
             try:
-                client = self.key_manager.get_client()
+                client = self.key_manager.get_current_client()
                 
                 # Usar más tokens para respuestas completas
                 response = client.chat(
@@ -173,8 +192,11 @@ class HybridChat:
                     return reply
                     
             except Exception as e:
-                logging.warning(f"Intento {attempt + 1} fallido: {e}")
-                if attempt == max_retries - 1:
+                logging.warning(f"Intento {attempt + 1} fallido con API key #{self.key_manager.current_index + 1}: {e}")
+                # Rotar a la siguiente key antes del próximo intento
+                if attempt < max_retries - 1:
+                    self.key_manager.rotate_to_next_key()
+                else:
                     break
         
         # Fallback seguro
